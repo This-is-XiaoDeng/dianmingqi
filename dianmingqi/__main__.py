@@ -24,7 +24,10 @@ def main() -> None:  # pragma: no cover - 入口
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
-    from .server import run
+    # 注意：使用绝对导入而不是相对导入。
+    # Nuitka 编译时把 __main__.py 当作顶层脚本编译，相对导入会报
+    # "attempted relative import with no known parent package"。
+    from dianmingqi.server import run
 
     run(host=args.host, port=args.port, open_browser=not args.no_browser)
 

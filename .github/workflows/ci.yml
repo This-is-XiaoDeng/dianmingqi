@@ -46,7 +46,19 @@ jobs:
       - name: Nuitka 编译（onefile）
         run: |
           poetry run python -m nuitka `
+            --standalone `
             --onefile `
+            --include-package=fastapi `
+            --include-package=uvicorn `
+            --include-package=starlette `
+            --include-package=pydantic `
+            --include-package=anyio `
+            --include-package=openpyxl `
+            --include-package=httpx `
+            --nofollow-import-to=unittest `
+            --nofollow-import-to=test `
+            --nofollow-import-to=tests `
+            --nofollow-import-to=pytest `
             --assume-yes-for-downloads `
             --windows-console-mode=force `
             --include-data-dir=webui=webui `
