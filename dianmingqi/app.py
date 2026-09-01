@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import tempfile
 from typing import List, Optional
 
@@ -13,7 +14,27 @@ from .importer import parse_file
 from .picker import picker
 from .store import store
 
-WEBUI_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "webui")
+
+def _find_webui_dir() -> str:
+    """定位 webui 静态目录。
+
+    兼容多种运行形态：
+    - 源码/poetry：相对于包目录 ../webui；
+    - Nuitka standalone/onefile：可执行文件旁或解压临时目录。
+    """
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    candidates = [
+        os.path.join(here, "webui"),
+        os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), "webui"),
+        os.path.join(os.getcwd(), "webui"),
+    ]
+    for cand in candidates:
+        if os.path.isdir(cand):
+            return cand
+    return candidates[0]
+
+
+WEBUI_DIR = _find_webui_dir()
 
 
 class ImportResponse(BaseModel):
