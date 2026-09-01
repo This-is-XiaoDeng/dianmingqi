@@ -4,6 +4,15 @@ on:
   release:
     types: [created]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "上传到的 Release tag（默认 v1.1.0）"
+        required: false
+        default: "v1.1.0"
+
+# 上传 Release asset 需要 contents: write 权限
+permissions:
+  contents: write
 
 jobs:
   build-windows:
@@ -71,6 +80,8 @@ jobs:
       - name: 上传 Release Asset
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag || 'v1.1.0' }}
+        shell: pwsh
         run: |
-          gh release upload "${{ github.event.release.tag_name }}" dist/dianmingqi.exe --clobber
-          Write-Host "已上传 dist/dianmingqi.exe 到 ${{ github.event.release.tag_name }}"
+          gh release upload "$env:RELEASE_TAG" dist/dianmingqi.exe --clobber
+          Write-Host "已上传 dist/dianmingqi.exe 到 $env:RELEASE_TAG"
