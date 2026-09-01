@@ -18,6 +18,9 @@ jobs:
         run: |
           pip install "poetry>=1.7"
           poetry install --no-interaction
+      - name: 安装 Nuitka
+        run: |
+          poetry run pip install nuitka
       - name: 编译（Nuitka onefile）
         run: |
           poetry run python -m nuitka `
