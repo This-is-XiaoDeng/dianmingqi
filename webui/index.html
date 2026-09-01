@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>点名器</title>
+<title>点名器 · By SunaōkamiNya</title>
 <style>
   :root {
     --big: clamp(10rem, min(40vw, 40vh), 42rem);
@@ -154,6 +154,34 @@
 
   #err { color: #e03131; font-size: var(--sub); text-align: center; min-height: 1em; }
 
+  /* ===== 署名 ===== */
+  #credit {
+    position: fixed;
+    right: 1.5vw;
+    bottom: 1.2vh;
+    font-size: clamp(1rem, 2.2vh, 1.6rem);
+    opacity: 0.55;
+    letter-spacing: 0.04em;
+    pointer-events: none;
+  }
+
+  /* ===== 断连提示 ===== */
+  #offline {
+    position: fixed; inset: 0;
+    background: rgba(30, 20, 50, 0.88);
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3vh;
+    z-index: 99;
+    text-align: center;
+  }
+  #offline.show { display: flex; }
+  #offline .icon { font-size: clamp(6rem, 18vh, 10rem); }
+  #offline .msg { font-size: clamp(2.4rem, 6vh, 4rem); font-weight: 700; }
+  #offline .sub { font-size: clamp(1.4rem, 3.5vh, 2.4rem); opacity: 0.75; }
+
   .hidden { display: none !important; }
 </style>
 </head>
@@ -172,6 +200,15 @@
   </div>
 
   <input type="file" id="fileInput" accept=".txt,.xlsx,.xlsm">
+
+  <div id="credit">By SunaōkamiNya</div>
+
+  <!-- 断连提示 -->
+  <div id="offline">
+    <div class="icon">⚠️</div>
+    <div class="msg">无法连接服务器</div>
+    <div class="sub">请确认程序仍在运行，或将网页关闭后重新打开</div>
+  </div>
 
   <!-- 导入面板 -->
   <div id="panel">
@@ -207,6 +244,27 @@
   var hasNames = false;
   var rolling = null;
 
+  // ---- 连接状态检测：连不上后端时显示全屏提示 ----
+  var offlineEl = document.getElementById('offline');
+  var failCount = 0;
+  function reportFail() {
+    failCount++;
+    if (failCount >= 2) offlineEl.classList.add('show');
+  }
+  function reportOk() {
+    failCount = 0;
+    offlineEl.classList.remove('show');
+  }
+  function apiFetch(url, opts) {
+    opts = opts || {};
+    if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) {
+      opts.signal = AbortSignal.timeout(6000);
+    }
+    return fetch(url, opts)
+      .then(function (r) { reportOk(); return r; })
+      .catch(function (e) { reportFail(); throw e; });
+  }
+
   function fitName() {
     // 根据名字长度调整字号，尽量铺满 viewport 且不溢出
     var len = (nameEl.textContent || '').length;
@@ -220,7 +278,7 @@
   }
 
   function loadState() {
-    fetch('/api/names').then(function (r) { return r.json(); }).then(function (d) {
+    apiFetch('/api/names').then(function (r) { return r.json(); }).then(function (d) {
       hasNames = d.count > 0;
       if (hasNames) {
         hintEl.classList.add('hidden');
@@ -251,7 +309,7 @@
     // 滚动动画：快速闪烁名字
     var i = 0;
     rolling = setInterval(function () {
-      fetch('/api/pick', { method: 'POST', headers: {'Content-Type':'application/json'} })
+      apiFetch('/api/pick', { method: 'POST', headers: {'Content-Type':'application/json'} })
         .then(function (r) { return r.json(); })
         .then(function (d) {
           nameEl.classList.add('rolling');
@@ -270,7 +328,7 @@
     pickBtn.disabled = false;
     pickBtn.textContent = '🎲 开始点名';
     // 最终结果
-    fetch('/api/pick', { method: 'POST', headers: {'Content-Type':'application/json'} })
+    apiFetch('/api/pick', { method: 'POST', headers: {'Content-Type':'application/json'} })
       .then(function (r) { return r.json(); })
       .then(function (d) {
         nameEl.classList.remove('rolling');
@@ -283,7 +341,7 @@
   }
 
   function doReset() {
-    fetch('/api/reset', { method: 'POST' }).then(function (r) { return r.json(); })
+    apiFetch('/api/reset', { method: 'POST' }).then(function (r) { return r.json(); })
       .then(loadState).catch(function () {});
   }
 
@@ -323,7 +381,7 @@
     fd.append('file', selectedFile);
     var col = parseInt(colNum.value, 10);
     if (!isNaN(col) && col >= 1) fd.append('column', String(col));
-    fetch('/api/import', { method: 'POST', body: fd })
+    apiFetch('/api/import', { method: 'POST', body: fd })
       .then(function (r) {
         if (!r.ok) return r.json().then(function (e) { throw new Error(e.detail || '导入失败'); });
         return r.json();
@@ -351,7 +409,7 @@
 
   // 心跳：让服务器知道页面还开着（关闭网页后服务器自动退出）
   setInterval(function () {
-    fetch('/api/ping', { cache: 'no-store' }).catch(function () {});
+    apiFetch('/api/ping', { cache: 'no-store' }).catch(function () {});
   }, 2000);
 
   loadState();

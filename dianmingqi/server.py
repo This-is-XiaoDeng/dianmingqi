@@ -65,11 +65,16 @@ def _monitor(server: uvicorn.Server) -> None:
             return
 
 
-def run(host: str = "127.0.0.1", port: Optional[int] = None, open_browser: bool = True) -> None:
+def run(
+    host: str = "127.0.0.1",
+    port: Optional[int] = None,
+    open_browser: bool = True,
+    data_dir: Optional[str] = None,
+) -> None:
     if port is None:
         port = _find_free_port()
 
-    app = create_app()
+    app = create_app(data_dir=data_dir)
     register_heartbeat(app)
 
     config = uvicorn.Config(app, host=host, port=port, log_level="info")

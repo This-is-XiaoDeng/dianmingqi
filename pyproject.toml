@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "dianmingqi"
-version = "1.0.0"
+version = "1.1.0"
 description = "点名器：面向希沃大屏的随机抽人 Web 应用，支持 txt / xlsx 导入，随机端口 + 自动开浏览器，关闭网页自动退出"
 authors = ["This-is-XiaoDeng <1744793737@qq.com>"]
 license = "AGPL-3.0"

@@ -1,0 +1,72 @@
+name: Release
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  build-windows:
+    name: Nuitka 编译 Windows 版 + 冒烟测试 + 上传 Release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: 安装依赖
+        run: |
+          pip install "poetry>=1.7"
+          poetry install --no-interaction
+      - name: 编译（Nuitka onefile）
+        run: |
+          poetry run python -m nuitka `
+            --standalone `
+            --onefile `
+            --include-package=fastapi `
+            --include-package=uvicorn `
+            --include-package=starlette `
+            --include-package=pydantic `
+            --include-package=anyio `
+            --include-package=openpyxl `
+            --include-package=httpx `
+            --nofollow-import-to=unittest `
+            --nofollow-import-to=test `
+            --nofollow-import-to=tests `
+            --nofollow-import-to=pytest `
+            --assume-yes-for-downloads `
+            --windows-console-mode=force `
+            --include-data-dir=webui=webui `
+            --output-dir=dist `
+            --output-filename=dianmingqi.exe `
+            dianmingqi/__main__.py
+      - name: 冒烟测试（启动 → 心跳 → 关闭）
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path "dist\dianmingqi.exe"
+          $stdout = "dist\smoke.stdout.log"
+          $stderr = "dist\smoke.stderr.log"
+          $proc = Start-Process -FilePath $exe -ArgumentList "--no-browser","--port","8787" -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          $ok = $false
+          for ($i = 0; $i -lt 90; $i++) {
+            Start-Sleep -Seconds 1
+            try {
+              $resp = Invoke-RestMethod -Uri "http://127.0.0.1:8787/api/ping" -TimeoutSec 3
+              if ($resp.ok -eq $true) { $ok = $true; break }
+            } catch {}
+          }
+          if (-not $ok) {
+            Write-Host "===== stdout ====="
+            Get-Content $stdout -ErrorAction SilentlyContinue
+            Write-Host "===== stderr ====="
+            Get-Content $stderr -ErrorAction SilentlyContinue
+            throw "冒烟测试失败：服务未在限时内响应"
+          }
+          Write-Host "冒烟测试通过：/api/ping 响应正常"
+          Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+      - name: 上传 Release Asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" dist/dianmingqi.exe --clobber
+          Write-Host "已上传 dist/dianmingqi.exe 到 ${{ github.event.release.tag_name }}"

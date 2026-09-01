@@ -21,6 +21,14 @@ class Picker:
         self._pool = list(names)
         self.reset()
 
+    def restore(self, names: List[str], remaining: Optional[List[str]] = None) -> None:
+        """从持久化状态恢复：名单 + 剩余候选。"""
+        self._pool = list(names)
+        self._remaining = list(remaining if remaining is not None else names)
+
+    def set_remaining(self, remaining: List[str]) -> None:
+        self._remaining = list(remaining)
+
     def reset(self) -> None:
         self._remaining = list(self._pool)
 
@@ -39,6 +47,9 @@ class Picker:
     @property
     def remaining(self) -> int:
         return len(self._remaining)
+
+    def remaining_names(self) -> List[str]:
+        return list(self._remaining)
 
 
 picker = Picker()

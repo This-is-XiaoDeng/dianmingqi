@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from .importer import parse_file
 from .picker import picker
-from .store import store
+from .store import default_data_file, store
 
 
 def _find_webui_dir() -> str:
@@ -57,8 +57,21 @@ class ListResponse(BaseModel):
     source: Optional[str]
 
 
-def create_app() -> FastAPI:
-    app = FastAPI(title="点名器", version="1.0.0")
+def create_app(data_dir: Optional[str] = None) -> FastAPI:
+    """创建 FastAPI 应用。
+
+    :param data_dir: 持久化目录（默认 ``~/.dianmingqi``）。
+        创建应用时自动恢复上次导入的名单。
+    """
+    if data_dir:
+        store.configure(os.path.join(data_dir, "names.json"))
+    elif store.data_file is None:
+        store.configure(default_data_file())
+    # 恢复持久化名单：导入一次，重启后无需再次导入
+    if store.load():
+        picker.restore(store.get(), store.remaining())
+
+    app = FastAPI(title="点名器", version="1.1.0")
 
     @app.get("/", include_in_schema=False)
     def index():
@@ -86,8 +99,9 @@ def create_app() -> FastAPI:
         if not names:
             raise HTTPException(status_code=400, detail="名单为空，请检查文件内容")
 
-        store.replace(names, source=file.filename or "")
+        store.replace(names, source=file.filename or "", remaining=list(names))
         picker.set_names(names)
+        store.save()
         return ImportResponse(count=store.count(), source=store.source() or "")
 
     @app.post("/api/pick", response_model=PickResponse)
@@ -99,11 +113,15 @@ def create_app() -> FastAPI:
             picker._repeat = repeat  # noqa: SLF001
             picker.reset()
         name = picker.pick()
+        store.set_remaining(picker.remaining_names())
+        store.save()
         return PickResponse(name=name, remaining=picker.remaining)
 
     @app.post("/api/reset", response_model=ListResponse)
     def reset():
         picker.reset()
+        store.set_remaining(picker.remaining_names())
+        store.save()
         return ListResponse(names=store.get(), count=store.count(), source=store.source())
 
     return app

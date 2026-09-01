@@ -8,10 +8,11 @@
 - 📂 **多数据源**：
   - **txt**：一行一个名字；
   - **xlsx**：选择一整列并自动去除表头（支持指定列号与工作表）。
-  - 导入后名单在进程内缓存。
+- 💾 **名单持久化**：导入一次后自动保存到 `~/.dianmingqi/names.json`（可用 `--data-dir` 指定），**重启后无需再次导入**，连剩余未抽中的人也会恢复。
 - 🖥️ **希沃大屏适配**：全屏铺满 viewport，字号随名字长度自动缩放，超大触摸按钮，支持空格键触发。
 - 🚀 **零配置启动**：随机端口 + 启动后自动打开浏览器，**网页关闭后应用自动退出**，用完即走不残留进程。
-- 🪟 **Windows 单文件版**：GitHub CI 通过 Nuitka 编译为一个 `.exe`，双击即用，并带冒烟测试。
+- ⚠️ **断连提示**：网页连不上后端（程序被关闭）时全屏提示「无法连接服务器」。
+- 🪟 **Windows 单文件版**：GitHub CI 通过 Nuitka 编译为一个 `.exe`，双击即用，并带冒烟测试；打 tag 发 Release 自动编译并上传产物。
 
 ## 技术栈
 
@@ -32,9 +33,10 @@ poetry run dianmingqi
 # 或直接运行
 poetry run python -m dianmingqi
 
-# 指定端口 / 不开浏览器
+# 指定端口 / 不开浏览器 / 指定持久化目录
 poetry run dianmingqi --port 8123
 poetry run dianmingqi --no-browser
+poetry run dianmingqi --data-dir /path/to/data
 ```
 
 启动后终端会打印访问地址：
@@ -43,7 +45,7 @@ poetry run dianmingqi --no-browser
 点名器已启动：http://127.0.0.1:8513/
 ```
 
-浏览器自动打开该地址。**关闭网页后，约 8 秒应用自动退出。**
+浏览器自动打开该地址。**关闭网页后，约 8 秒应用自动退出。** 再次启动时，上次导入的名单会自动恢复，无需重新导入。
 
 ### 手动运行服务器
 
@@ -59,9 +61,15 @@ uvicorn dianmingqi.app:app
 2. 点击 **🎲 开始点名** 随机抽取（带滚动动画）。
 3. 点击 **🔄 重置** 让所有名字重新可抽。
 
+导入的名单与剩余候选会持久化到本地，重启后自动恢复。
+
+## 断连提示
+
+前端持续检测与后端的连接：连续 2 次请求失败（例如程序被关闭）后，全屏提示 **⚠️ 无法连接服务器**；后端恢复后提示自动消失。
+
 ## Windows 单文件版
 
-在 GitHub Actions 的 Release / Artifact 中下载 `dianmingqi-windows` 产物里的 `dianmingqi.exe`，双击即可运行（首次启动解包会稍慢）。无需安装 Python。
+在 [Releases](../../releases) 页面下载 `dianmingqi.exe`，双击即可运行（首次启动解包会稍慢）。无需安装 Python。
 
 也可以在本地编译：
 

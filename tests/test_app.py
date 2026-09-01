@@ -11,9 +11,11 @@ from dianmingqi.store import store
 
 
 @pytest.fixture(autouse=True)
-def clean_state():
-    """每个测试前清空全局缓存，避免测试间相互污染。"""
+def clean_state(tmp_path):
+    """每个测试前清空全局缓存并指向临时持久化文件，避免测试间相互污染。"""
+    store.configure(str(tmp_path / "names.json"))
     store.replace([])
+    store.set_remaining([])
     picker.set_names([])
     yield
 
@@ -89,3 +91,68 @@ def test_reset(client, tmp_path):
     r = client.post("/api/reset")
     assert r.status_code == 200
     assert r.json()["count"] == 2
+
+
+# ---- 持久化 ----
+
+def test_import_persists_and_restores(tmp_path):
+    """导入后写入磁盘；重新创建应用（模拟重启）自动恢复名单。"""
+    data_dir = tmp_path / "data"
+    f = tmp_path / "a.txt"
+    f.write_text("张三\n李四\n王五\n", encoding="utf-8")
+
+    # 第一次启动：导入
+    store.configure(str(data_dir / "names.json"))
+    picker.set_names([])
+    app1 = create_app(data_dir=str(data_dir))
+    with TestClient(app1) as c:
+        with open(f, "rb") as fh:
+            r = c.post("/api/import", files={"file": ("a.txt", fh, "text/plain")})
+        assert r.json()["count"] == 3
+
+    # 持久化文件已写入
+    import json
+    assert (data_dir / "names.json").exists()
+    saved = json.loads((data_dir / "names.json").read_text(encoding="utf-8"))
+    assert saved["names"] == ["张三", "李四", "王五"]
+
+    # 第二次启动（新的应用实例，等价于重启进程）：无需再导入
+    store.replace([])
+    picker.set_names([])
+    app2 = create_app(data_dir=str(data_dir))
+    with TestClient(app2) as c:
+        names = c.get("/api/names").json()
+        assert names["count"] == 3
+        assert names["names"] == ["张三", "李四", "王五"]
+
+
+def test_persist_remaining_state(tmp_path):
+    """抽取后的剩余候选也持久化，重启后继续从未抽中的人里抽。"""
+    data_dir = tmp_path / "data"
+    f = tmp_path / "a.txt"
+    f.write_text("张三\n李四\n王五\n", encoding="utf-8")
+
+    store.configure(str(data_dir / "names.json"))
+    picker.set_names([])
+    app1 = create_app(data_dir=str(data_dir))
+    with TestClient(app1) as c:
+        with open(f, "rb") as fh:
+            c.post("/api/import", files={"file": ("a.txt", fh, "text/plain")})
+        r = c.post("/api/pick", json={"repeat": False})
+        picked = r.json()["name"]
+        assert r.json()["remaining"] == 2
+
+    # 重启后剩余候选恢复为 2 人（除了已抽中的 picked）
+    store.replace([])
+    picker.set_names([])
+    app2 = create_app(data_dir=str(data_dir))
+    assert store.count() == 3
+    assert len(store.remaining()) == 2
+    assert picked not in store.remaining()
+    with TestClient(app2) as c:
+        names = c.get("/api/names").json()
+        assert names["count"] == 3
+        # 复位后全名单可抽，initial 抽中的人应在候选里
+        c.post("/api/reset")
+        all_after_reset = {c.post("/api/pick", json={}).json()["name"] for _ in range(3)}
+        assert picked in all_after_reset
