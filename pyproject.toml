@@ -1,0 +1,36 @@
+[tool.poetry]
+name = "dianmingqi"
+version = "1.0.0"
+description = "点名器：面向希沃大屏的随机抽人 Web 应用，支持 txt / xlsx 导入，随机端口 + 自动开浏览器，关闭网页自动退出"
+authors = ["This-is-XiaoDeng <1744793737@qq.com>"]
+license = "AGPL-3.0"
+readme = "README.md"
+repository = "https://github.com/This-is-XiaoDeng/dianmingqi"
+homepage = "https://github.com/This-is-XiaoDeng/dianmingqi"
+keywords = ["roll-call", "点名", "random", "fastapi", "webui"]
+packages = [{ include = "dianmingqi" }]
+
+[tool.poetry.dependencies]
+python = ">=3.9,<4.0"
+fastapi = "^0.115"
+uvicorn = { extras = ["standard"], version = "^0.34" }
+pydantic = "^2.10"
+python-multipart = "^0.0.20"
+openpyxl = "^3.1"
+
+[tool.poetry.scripts]
+dianmingqi = "dianmingqi.__main__:main"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3"
+pytest-asyncio = "^0.24"
+httpx = "^0.28"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

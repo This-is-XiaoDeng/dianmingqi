@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>点名器</title>
+<style>
+  :root {
+    --big: clamp(10rem, min(40vw, 40vh), 42rem);
+    --btn: clamp(2.4rem, 7vh, 6rem);
+    --sub: clamp(1.4rem, 3.5vh, 3rem);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+    height: 100vh;
+    width: 100vw;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+    user-select: none;
+  }
+
+  /* ===== 主区域：名字占满整个 viewport ===== */
+  #stage {
+    flex: 1;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2vh;
+    padding: 2vh 4vw;
+  }
+
+  #hint {
+    font-size: clamp(2rem, 6vh, 4rem);
+    opacity: 0.6;
+  }
+
+  #name {
+    font-size: var(--big);
+    font-weight: 800;
+    line-height: 1.15;
+    text-align: center;
+    word-break: break-all;
+    max-width: 100%;
+    text-shadow: 0 6px 24px rgba(0,0,0,0.35);
+  }
+
+  /* 名字过长时自动缩小，尽量铺满但不溢出 */
+  #name.smaller { font-size: calc(var(--big) * 0.62); }
+  #name.smallest { font-size: calc(var(--big) * 0.4); }
+
+  /* ===== 抽中动画 ===== */
+  .rolling { color: #ffe066; }
+  .done {
+    color: #fff;
+    animation: pop 0.5s ease;
+  }
+  @keyframes pop {
+    0% { transform: scale(0.6); opacity: 0; }
+    60% { transform: scale(1.12); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  #count {
+    font-size: var(--sub);
+    opacity: 0.75;
+  }
+
+  /* ===== 控制栏 ===== */
+  #controls {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 2vw;
+    padding: 2vw;
+  }
+
+  button {
+    font-size: var(--btn);
+    font-weight: 700;
+    padding: 1.6vh 4vw;
+    border: none;
+    border-radius: 24px;
+    cursor: pointer;
+    color: #fff;
+    transition: transform 0.12s ease, filter 0.12s ease;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.25);
+  }
+  button:hover { filter: brightness(1.1); }
+  button:active { transform: scale(0.95); }
+
+  #pickBtn   { background: #ff6b6b; flex: 2; min-width: 40%; }
+  #resetBtn  { background: #4dabf7; }
+  #importBtn { background: #51cf66; }
+
+  #fileInput {
+    position: absolute;
+    width: 0; height: 0; opacity: 0; overflow: hidden;
+  }
+
+  /* 导入面板（覆盖层） */
+  #panel {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.62);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+  }
+  #panel.show { display: flex; }
+  #card {
+    background: #fff; color: #333;
+    border-radius: 32px;
+    padding: 6vh 6vw;
+    width: 82vw; max-width: 1100px;
+    display: flex; flex-direction: column; gap: 4vh;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+  }
+  #card h2 { font-size: clamp(2.2rem, 6vh, 4rem); text-align: center; }
+  #dropzone {
+    border: 3px dashed #aaa;
+    border-radius: 24px;
+    padding: 6vh 2vw;
+    text-align: center;
+    font-size: var(--sub);
+    color: #555;
+    cursor: pointer;
+  }
+  #dropzone.drag { border-color: #51cf66; background: #eefbf0; }
+
+  #colPicker {
+    display: flex; align-items: center; justify-content: center;
+    gap: 1.5vw; font-size: var(--sub); color: #333;
+  }
+  #colPicker input {
+    width: 5em; font-size: var(--sub);
+    padding: 1vh 1vw; text-align: center;
+    border: 2px solid #ccc; border-radius: 12px;
+  }
+
+  #cardBtns { display: flex; gap: 2vw; justify-content: center; }
+  #cardBtns button { flex: 1; font-size: var(--sub); }
+  #confirmBtn { background: #51cf66; }
+  #cancelBtn  { background: #adb5bd; }
+
+  #err { color: #e03131; font-size: var(--sub); text-align: center; min-height: 1em; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+  <div id="stage">
+    <div id="hint">点击「开始点名」抽取一名同学</div>
+    <div id="name" class="hidden"></div>
+    <div id="count" class="hidden"></div>
+  </div>
+
+  <div id="controls">
+    <button id="pickBtn">🎲 开始点名</button>
+    <button id="resetBtn">🔄 重置</button>
+    <button id="importBtn">📂 导入名单</button>
+  </div>
+
+  <input type="file" id="fileInput" accept=".txt,.xlsx,.xlsm">
+
+  <!-- 导入面板 -->
+  <div id="panel">
+    <div id="card">
+      <h2>导入名单</h2>
+      <div id="dropzone">点击选择文件<br>支持 txt（一行一个）或 xlsx（选择一整列）</div>
+      <div id="colPicker">
+        <label>xlsx 列号（默认第 1 列，将去除表头）：</label>
+        <input type="number" id="colNum" min="1" value="1">
+      </div>
+      <div id="err"></div>
+      <div id="cardBtns">
+        <button id="confirmBtn">确认导入</button>
+        <button id="cancelBtn">取消</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function () {
+  var nameEl = document.getElementById('name');
+  var hintEl = document.getElementById('hint');
+  var countEl = document.getElementById('count');
+  var pickBtn = document.getElementById('pickBtn');
+  var resetBtn = document.getElementById('resetBtn');
+  var importBtn = document.getElementById('importBtn');
+  var fileInput = document.getElementById('fileInput');
+  var panel = document.getElementById('panel');
+  var dropzone = document.getElementById('dropzone');
+  var colNum = document.getElementById('colNum');
+  var errEl = document.getElementById('err');
+  var selectedFile = null;
+  var hasNames = false;
+  var rolling = null;
+
+  function fitName() {
+    // 根据名字长度调整字号，尽量铺满 viewport 且不溢出
+    var len = (nameEl.textContent || '').length;
+    if (len <= 2) {
+      nameEl.classList.remove('smaller', 'smallest');
+    } else if (len <= 6) {
+      nameEl.classList.add('smaller'); nameEl.classList.remove('smallest');
+    } else {
+      nameEl.classList.add('smallest');
+    }
+  }
+
+  function loadState() {
+    fetch('/api/names').then(function (r) { return r.json(); }).then(function (d) {
+      hasNames = d.count > 0;
+      if (hasNames) {
+        hintEl.classList.add('hidden');
+        nameEl.classList.remove('hidden');
+        countEl.classList.remove('hidden');
+      } else {
+        hintEl.classList.remove('hidden');
+        nameEl.classList.add('hidden');
+        countEl.classList.add('hidden');
+      }
+      renderCount(d.names);
+    }).catch(function () {});
+  }
+
+  function renderCount(names) {
+    if (!hasNames) { countEl.textContent = ''; return; }
+    var called = (names || []).length;
+    countEl.textContent = '共 ' + called + ' 人';
+  }
+
+  function doPick() {
+    if (rolling) return;
+    if (!hasNames) { alert('请先导入名单'); return; }
+    pickBtn.disabled = true;
+    pickBtn.textContent = '…';
+    countEl.classList.add('hidden');
+    nameEl.classList.remove('done');
+    // 滚动动画：快速闪烁名字
+    var i = 0;
+    rolling = setInterval(function () {
+      fetch('/api/pick', { method: 'POST', headers: {'Content-Type':'application/json'} })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          nameEl.classList.add('rolling');
+          nameEl.textContent = d.name || '';
+          fitName();
+          i++;
+        }).catch(function () {});
+    }, 90);
+    setTimeout(stopPick, 900);
+  }
+
+  function stopPick() {
+    if (!rolling) return;
+    clearInterval(rolling);
+    rolling = null;
+    pickBtn.disabled = false;
+    pickBtn.textContent = '🎲 开始点名';
+    // 最终结果
+    fetch('/api/pick', { method: 'POST', headers: {'Content-Type':'application/json'} })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        nameEl.classList.remove('rolling');
+        nameEl.classList.add('done');
+        nameEl.textContent = d.name || '';
+        fitName();
+        countEl.textContent = '剩余 ' + d.remaining + ' 人';
+        countEl.classList.remove('hidden');
+      }).catch(function () {});
+  }
+
+  function doReset() {
+    fetch('/api/reset', { method: 'POST' }).then(function (r) { return r.json(); })
+      .then(loadState).catch(function () {});
+  }
+
+  // ---- 导入 ----
+  function openPanel() { panel.classList.add('show'); }
+  function closePanel() {
+    panel.classList.remove('show');
+    selectedFile = null;
+    errEl.textContent = '';
+  }
+
+  importBtn.addEventListener('click', openPanel);
+
+  dropzone.addEventListener('click', function () { fileInput.click(); });
+
+  fileInput.addEventListener('change', function () {
+    if (fileInput.files.length) {
+      selectedFile = fileInput.files[0];
+      dropzone.textContent = '已选择：' + selectedFile.name;
+    }
+  });
+
+  ['dragenter','dragover'].forEach(function (ev) {
+    dropzone.addEventListener(ev, function (e) { e.preventDefault(); dropzone.classList.add('drag'); });
+  });
+  ['dragleave','drop'].forEach(function (ev) {
+    dropzone.addEventListener(ev, function (e) { e.preventDefault(); dropzone.classList.remove('drag'); });
+  });
+  dropzone.addEventListener('drop', function (e) {
+    var f = e.dataTransfer.files[0];
+    if (f) { selectedFile = f; dropzone.textContent = '已选择：' + f.name; }
+  });
+
+  document.getElementById('confirmBtn').addEventListener('click', function () {
+    if (!selectedFile) { errEl.textContent = '请先选择文件'; return; }
+    var fd = new FormData();
+    fd.append('file', selectedFile);
+    var col = parseInt(colNum.value, 10);
+    if (!isNaN(col) && col >= 1) fd.append('column', String(col));
+    fetch('/api/import', { method: 'POST', body: fd })
+      .then(function (r) {
+        if (!r.ok) return r.json().then(function (e) { throw new Error(e.detail || '导入失败'); });
+        return r.json();
+      })
+      .then(function (d) {
+        alert('成功导入 ' + d.count + ' 人');
+        closePanel();
+        loadState();
+      })
+      .catch(function (e) { errEl.textContent = e.message; });
+  });
+
+  document.getElementById('cancelBtn').addEventListener('click', closePanel);
+
+  pickBtn.addEventListener('click', doPick);
+  resetBtn.addEventListener('click', doReset);
+
+  // 空格键触发点名
+  document.addEventListener('keydown', function (e) {
+    if (e.code === 'Space' && !panel.classList.contains('show')) {
+      e.preventDefault();
+      doPick();
+    }
+  });
+
+  // 心跳：让服务器知道页面还开着（关闭网页后服务器自动退出）
+  setInterval(function () {
+    fetch('/api/ping', { cache: 'no-store' }).catch(function () {});
+  }, 2000);
+
+  loadState();
+})();
+</script>
+</body>
+</html>

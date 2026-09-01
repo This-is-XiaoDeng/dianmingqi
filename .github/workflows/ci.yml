@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: 单元测试 (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: 安装依赖
+        run: |
+          pip install "poetry>=1.7"
+          poetry install --with dev --no-interaction
+      - name: 运行测试
+        run: poetry run pytest -q
+
+  build-windows:
+    name: Nuitka 编译 Windows 版 + 冒烟测试
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: 安装依赖
+        run: |
+          pip install "poetry>=1.7"
+          poetry install --no-interaction
+      - name: 安装 Nuitka 与编译工具链
+        run: |
+          poetry run pip install nuitka
+          # Windows 下保留控制台窗口便于查看日志/调试
+      - name: Nuitka 编译（onefile）
+        run: |
+          poetry run python -m nuitka `
+            --onefile `
+            --assume-yes-for-downloads `
+            --windows-console-mode=force `
+            --include-data-dir=webui=webui `
+            --output-dir=dist `
+            --output-filename=dianmingqi.exe `
+            dianmingqi/__main__.py
+      - name: 冒烟测试（启动 → 心跳 → 关闭）
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path "dist\dianmingqi.exe"
+          # onefile 首次运行需解包，给足启动时间
+          $proc = Start-Process -FilePath $exe -ArgumentList "--no-browser","--port","8787" -PassThru
+          $ok = $false
+          for ($i = 0; $i -lt 60; $i++) {
+            Start-Sleep -Seconds 1
+            try {
+              $resp = Invoke-RestMethod -Uri "http://127.0.0.1:8787/api/ping" -TimeoutSec 3
+              if ($resp.ok -eq $true) { $ok = $true; break }
+            } catch {}
+          }
+          if (-not $ok) {
+            # 输出日志便于排查
+            Get-Content dist\dianmingqi.log -ErrorAction SilentlyContinue
+            throw "冒烟测试失败：服务未在限时内响应"
+          }
+          Write-Host "冒烟测试通过：/api/ping 响应正常"
+          # 健康检查页面可访问
+          $html = Invoke-WebRequest -Uri "http://127.0.0.1:8787/" -UseBasicParsing
+          if ($html.StatusCode -ne 200) { throw "首页返回异常：$($html.StatusCode)" }
+          Write-Host "首页可访问，状态码 $($html.StatusCode)"
+          Stop-Process -Id $proc.Id -Force
+      - name: 上传编译产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: dianmingqi-windows
+          path: dist/dianmingqi.exe
