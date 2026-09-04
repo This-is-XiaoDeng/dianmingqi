@@ -60,3 +60,16 @@ def test_parse_xlsx_all_header_only(tmp_path):
     p = tmp_path / "list.xlsx"
     wb.save(p)
     assert parse_xlsx_column(str(p)) == []
+
+
+def test_parse_xlsx_has_header_checkbox(tmp_path):
+    """has_header=False 时第一行（表头）也作为名字导入。"""
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["姓名"])
+    ws.append(["张三"])
+    ws.append(["李四"])
+    p = tmp_path / "list.xlsx"
+    wb.save(p)
+    assert parse_xlsx_column(str(p), has_header=True) == ["张三", "李四"]
+    assert parse_xlsx_column(str(p), has_header=False) == ["姓名", "张三", "李四"]

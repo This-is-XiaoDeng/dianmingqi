@@ -140,11 +140,20 @@
   #colPicker {
     display: flex; align-items: center; justify-content: center;
     gap: 1.5vw; font-size: var(--sub); color: #333;
+    flex-wrap: wrap;
   }
-  #colPicker input {
+  #colPicker input[type="number"] {
     width: 5em; font-size: var(--sub);
     padding: 1vh 1vw; text-align: center;
     border: 2px solid #ccc; border-radius: 12px;
+  }
+  #colPicker label.headBox {
+    display: flex; align-items: center; gap: 0.6vw;
+    cursor: pointer; user-select: none;
+  }
+  #colPicker input[type="checkbox"] {
+    width: 1.4em; height: 1.4em;
+    accent-color: #51cf66; cursor: pointer;
   }
 
   #cardBtns { display: flex; gap: 2vw; justify-content: center; }
@@ -153,6 +162,37 @@
   #cancelBtn  { background: #adb5bd; }
 
   #err { color: #e03131; font-size: var(--sub); text-align: center; min-height: 1em; }
+
+  /* ===== 导入结果预览弹窗 ===== */
+  #result {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.62);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+  }
+  #result.show { display: flex; }
+  #resCard {
+    background: #fff; color: #333;
+    border-radius: 32px;
+    padding: 6vh 6vw;
+    width: 76vw; max-width: 860px;
+    display: flex; flex-direction: column; align-items: center; gap: 3vh;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+  }
+  #resCard h2 { font-size: clamp(2.4rem, 6.5vh, 4.2rem); text-align: center; }
+  #resPreview {
+    list-style: none;
+    display: flex; flex-direction: column; align-items: center; gap: 1vh;
+    min-height: 1em;
+  }
+  #resPreview li {
+    font-size: clamp(2rem, 5.5vh, 3.6rem);
+    font-weight: 800;
+    color: #2f9e44;
+  }
+  #resCloseBtn { background: #51cf66; width: 55%; font-size: var(--sub); }
 
   /* ===== 署名 ===== */
   #credit {
@@ -210,14 +250,24 @@
     <div class="sub">请确认程序仍在运行，或将网页关闭后重新打开</div>
   </div>
 
+  <!-- 导入结果预览弹窗 -->
+  <div id="result">
+    <div id="resCard">
+      <h2 id="resTitle"></h2>
+      <ul id="resPreview"></ul>
+      <button id="resCloseBtn">好的</button>
+    </div>
+  </div>
+
   <!-- 导入面板 -->
   <div id="panel">
     <div id="card">
       <h2>导入名单</h2>
       <div id="dropzone">点击选择文件<br>支持 txt（一行一个）或 xlsx（选择一整列）</div>
       <div id="colPicker">
-        <label>xlsx 列号（默认第 1 列，将去除表头）：</label>
+        <label>xlsx 列号（默认第 1 列）：</label>
         <input type="number" id="colNum" min="1" value="1">
+        <label class="headBox"><input type="checkbox" id="hasHeader" checked> 删除表头（xlsx 第一行）</label>
       </div>
       <div id="err"></div>
       <div id="cardBtns">
@@ -239,10 +289,16 @@
   var panel = document.getElementById('panel');
   var dropzone = document.getElementById('dropzone');
   var colNum = document.getElementById('colNum');
+  var hasHeader = document.getElementById('hasHeader');
   var errEl = document.getElementById('err');
   var selectedFile = null;
   var hasNames = false;
   var rolling = null;
+
+  // 导入结果预览弹窗
+  var resultEl = document.getElementById('result');
+  var resTitle = document.getElementById('resTitle');
+  var resPreview = document.getElementById('resPreview');
 
   // ---- 连接状态检测：连不上后端时显示全屏提示 ----
   var offlineEl = document.getElementById('offline');
@@ -353,6 +409,21 @@
     errEl.textContent = '';
   }
 
+  // 导入成功弹窗：显示人数 + 前三个名字预览（不足三个显示全部）
+  function showImportResult(count, names) {
+    resTitle.textContent = '成功导入 ' + count + ' 人';
+    resPreview.textContent = '';
+    (names || []).slice(0, 3).forEach(function (n) {
+      var li = document.createElement('li');
+      li.textContent = n;
+      resPreview.appendChild(li);
+    });
+    resultEl.classList.add('show');
+  }
+  document.getElementById('resCloseBtn').addEventListener('click', function () {
+    resultEl.classList.remove('show');
+  });
+
   importBtn.addEventListener('click', openPanel);
 
   dropzone.addEventListener('click', function () { fileInput.click(); });
@@ -381,13 +452,14 @@
     fd.append('file', selectedFile);
     var col = parseInt(colNum.value, 10);
     if (!isNaN(col) && col >= 1) fd.append('column', String(col));
+    fd.append('has_header', hasHeader.checked ? 'true' : 'false');
     apiFetch('/api/import', { method: 'POST', body: fd })
       .then(function (r) {
         if (!r.ok) return r.json().then(function (e) { throw new Error(e.detail || '导入失败'); });
         return r.json();
       })
       .then(function (d) {
-        alert('成功导入 ' + d.count + ' 人');
+        showImportResult(d.count, d.names);
         closePanel();
         loadState();
       })

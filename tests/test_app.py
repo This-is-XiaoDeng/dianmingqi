@@ -78,6 +78,40 @@ def test_import_xlsx(client, tmp_path):
     assert resp.json()["count"] == 2
 
 
+def test_import_xlsx_has_header_suppress_removal(client, tmp_path):
+    """has_header=false 时表头行不再被删除；names 用于前端预览。"""
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["姓名"])
+    ws.append(["张三"])
+    ws.append(["李四"])
+    p = tmp_path / "c.xlsx"
+    wb.save(p)
+
+    # 显式 has_header=false → 表头也计入名单
+    with open(p, "rb") as fh:
+        resp = client.post(
+            "/api/import",
+            files={"file": ("c.xlsx", fh, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            data={"column": "1", "has_header": "false"},
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["count"] == 3
+    assert data["names"] == ["姓名", "张三", "李四"]
+
+    # 默认（缺省 has_header）仍去除表头
+    with open(p, "rb") as fh:
+        resp = client.post(
+            "/api/import",
+            files={"file": ("c.xlsx", fh, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            data={"column": "1"},
+        )
+    assert resp.status_code == 200
+    assert resp.json()["count"] == 2
+    assert resp.json()["names"] == ["张三", "李四"]
+
+
 def test_pick_before_import_400(client):
     assert client.post("/api/pick", json={}).status_code == 400
 

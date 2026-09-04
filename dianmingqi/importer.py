@@ -1,8 +1,8 @@
 """数据导入：从 txt / xlsx 读取名单。
 
 - txt：一行一个，忽略空行，strip 首尾空白。
-- xlsx：选择一个整列，去除表头（第一行）后取该列剩余单元格，
-  忽略空单元格并去重、去空白。
+- xlsx：选择一个整列，可选去除表头（第一行）后取该列剩余单元格，
+  忽略空单元格并去重、去空白（是否去表头由 ``has_header`` 决定）。
 
 对外只暴露 :func:`parse_file`,返回去重后的名单列表。
 """
@@ -35,35 +35,45 @@ def parse_txt(path: str) -> List[str]:
     return _clean(lines)
 
 
-def parse_xlsx_column(path: str, sheet: Optional[int] = None, column: Optional[int] = None) -> List[str]:
-    """从 xlsx 读取一整列并去除表头。
+def parse_xlsx_column(
+    path: str,
+    sheet: Optional[int] = None,
+    column: Optional[int] = None,
+    has_header: bool = True,
+) -> List[str]:
+    """从 xlsx 读取一整列，可选择去除表头。
 
     :param sheet: 工作表序号（从 0 开始），默认第一个。
     :param column: 列序号（从 1 开始），默认第一列（A）。
+    :param has_header: 是否把第一行当作表头跳过（默认 True）。
     """
     wb = load_workbook(path, read_only=True, data_only=True)
     try:
         ws = wb.worksheets[sheet if sheet is not None else 0]
         col = column if column is not None else 1
-        # 去除表头：跳过第一行
+        # 整列逐行取值；若 has_header 则跳过第一行（表头）
         values = []
-        for row in ws.iter_rows(min_col=col, max_col=col, values_only=True):
+        for idx, row in enumerate(ws.iter_rows(min_col=col, max_col=col, values_only=True)):
+            if has_header and idx == 0:
+                continue
             cell = row[0]
             if cell is None:
                 continue
             values.append(str(cell))
-        # values[0] 是表头，去掉
-        if values:
-            values = values[1:]
         return _clean(values)
     finally:
         wb.close()
 
 
-def parse_file(path: str, sheet: Optional[int] = None, column: Optional[int] = None) -> List[str]:
+def parse_file(
+    path: str,
+    sheet: Optional[int] = None,
+    column: Optional[int] = None,
+    has_header: bool = True,
+) -> List[str]:
     """根据扩展名自动选择合适的解析器。"""
     ext = os.path.splitext(path)[1].lower()
     if ext in (".xlsx", ".xlsm"):
-        return parse_xlsx_column(path, sheet=sheet, column=column)
+        return parse_xlsx_column(path, sheet=sheet, column=column, has_header=has_header)
     # 其余按 txt 处理：一行一个
     return parse_txt(path)

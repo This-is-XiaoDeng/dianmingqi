@@ -40,6 +40,7 @@ WEBUI_DIR = _find_webui_dir()
 class ImportResponse(BaseModel):
     count: int
     source: str
+    names: List[str] = []
 
 
 class PickRequest(BaseModel):
@@ -86,13 +87,14 @@ def create_app(data_dir: Optional[str] = None) -> FastAPI:
         file: UploadFile = File(...),
         sheet: Optional[int] = Form(None),
         column: Optional[int] = Form(None),
+        has_header: bool = Form(True),
     ):
         suffix = os.path.splitext(file.filename or "")[1] or ".txt"
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
             tmp.write(await file.read())
             tmp_path = tmp.name
         try:
-            names = parse_file(tmp_path, sheet=sheet, column=column)
+            names = parse_file(tmp_path, sheet=sheet, column=column, has_header=has_header)
         finally:
             os.unlink(tmp_path)
 
@@ -102,7 +104,7 @@ def create_app(data_dir: Optional[str] = None) -> FastAPI:
         store.replace(names, source=file.filename or "", remaining=list(names))
         picker.set_names(names)
         store.save()
-        return ImportResponse(count=store.count(), source=store.source() or "")
+        return ImportResponse(count=store.count(), source=store.source() or "", names=store.get())
 
     @app.post("/api/pick", response_model=PickResponse)
     def pick(req: Optional[PickRequest] = None):
